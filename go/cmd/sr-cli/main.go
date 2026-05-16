@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gihub.com/summervik/swing-ranger/internal/config"
 )
 
 type Config struct {
@@ -37,6 +39,13 @@ func main() {
 		showUsage()
 		os.Exit(2)
 	}
+
+	secrets, err := config.LoadSecrets()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(3)
+	}
+	fmt.Printf("%+v\n", secrets.ConnectionStrings)
 
 	fmt.Println(cfg.Command)
 	if cfg.Verbose {
