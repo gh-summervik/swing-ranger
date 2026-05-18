@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gihub.com/summervik/swing-ranger/internal/config"
+	"github.com/summervik/swing-ranger/internal/config"
 )
 
 type Config struct {
