@@ -1,19 +1,19 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/summervik/swing-ranger/internal/config"
-)
+	"github.com/summervik/swing-ranger/internal/service"
 
-type Config struct {
-	Command  string
-	Verbose  bool
-	ShowHelp bool
-}
+	_ "github.com/lib/pq"
+)
 
 type CommandArg struct {
 	Command     string
@@ -45,19 +45,59 @@ func main() {
 		fmt.Println(err)
 		os.Exit(3)
 	}
-	fmt.Printf("%+v\n", secrets.ConnectionStrings)
+	cfg.Secrets = secrets
 
-	fmt.Println(cfg.Command)
-	if cfg.Verbose {
-		fmt.Println("Verbose")
-	} else {
-		fmt.Println("Silent")
+	if cfg.Command == "collect" {
+		cmdDb, err := sql.Open("postgres", cfg.Secrets.ConnectionStrings["Command"])
+		if err != nil {
+			fmt.Println("No query string found for Command.")
+			os.Exit(4)
+		}
+		qryDb, err := sql.Open("postgres", cfg.Secrets.ConnectionStrings["Query"])
+		if err != nil {
+			fmt.Println("No query string found for Query.")
+			os.Exit(4)
+		}
+		defer cmdDb.Close()
+		defer qryDb.Close()
+
+		yahooSvc := service.NewYahooService()
+
+		ctx := context.Background()
+		start := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		end := time.Now().UTC()
+
+		prices, err := yahooSvc.GetHistorical(ctx, cfg.Data, start, end)
+		if err != nil {
+			fmt.Printf("Failed to fetch data from Yahoo: %v\n", err)
+			os.Exit(6)
+		}
+
+		err = service.UpsertEodPrices(cmdDb, prices, "system")
+		if err != nil {
+			fmt.Printf("Failed to save data to database: %v\n", err)
+			os.Exit(7)
+		}
+
+		fmt.Printf("Collected and saved %d records for %s\n", len(prices), cfg.Data)
+
+		// chart, err := service.GetEodPrices(qryDb, cfg.Data)
+		// if err != nil {
+		// 	fmt.Println(err)
+		// 	os.Exit(5)
+		// }
+		// fmt.Println(chart)
+		// return
 	}
+
+	// fmt.Printf("%+v\n", cfg.Secrets.ConnectionStrings)
+	os.Exit(0)
 }
 
 func showUsage() {
 	cmds := []CommandArg{
-		{"init", "The command to execute"},
+		{"[init]", "Initialize for first-time use. Will NOT injure existig initializations."},
+		{"[collect <SYMBOL>]", "Capture price history for provided symbol."},
 		{"[-h | -? | ? | --help]", "Show help"},
 		{"[-v | --verbose]", "Verbose output"},
 	}
@@ -88,17 +128,27 @@ func showUsage() {
 	}
 }
 
-func parseArgs(args []string) Config {
-	cfg := Config{
+func parseArgs(args []string) config.Config {
+	cfg := config.Config{
 		Command: "",
 		Verbose: false,
 	}
 
-	for i := 1; i < len(args); i++ {
+	count := len(args)
+
+	for i := 1; i < count; i++ {
 		arg := strings.ToLower(os.Args[i])
 		switch arg {
 		case "init":
 			cfg.Command = arg
+		case "collect":
+			cfg.Command = arg
+			i++
+			if i >= count {
+				fmt.Printf("Expecting symbol after %s\n", os.Args[i-1])
+				os.Exit(-1)
+			}
+			cfg.Data = strings.ToUpper(os.Args[i])
 		case "-v", "--verbose":
 			cfg.Verbose = true
 		case "-h", "help", "--help", "-?", "?":

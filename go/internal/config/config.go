@@ -9,9 +9,14 @@ import (
 
 type Secrets struct {
 	ConnectionStrings map[string]string `json:"ConnectionStrings"`
-	// Add more top-level sections here later, e.g.:
-	// ApiKeys map[string]string `json:"ApiKeys"`
-	// Trading map[string]interface{} `json:"Trading"`
+}
+
+type Config struct {
+	ShowHelp bool
+	Verbose  bool
+	Command  string
+	Data     string
+	Secrets  *Secrets
 }
 
 func LoadSecrets() (*Secrets, error) {

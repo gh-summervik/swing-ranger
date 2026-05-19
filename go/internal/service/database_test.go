@@ -28,16 +28,26 @@ func TestUpsertAndGetEodPrice(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	connStr, ok := s.ConnectionStrings["Command"]
+	cmdConnStr, ok := s.ConnectionStrings["Command"]
 	if !ok {
 		t.Fatal("Command connection string not found in secrets.json")
 	}
 
-	db, err := sql.Open("postgres", connStr)
+	qryConnStr, ok := s.ConnectionStrings["Query"]
+	if !ok {
+		t.Fatal("Query connection string not found in secrets.json")
+	}
+
+	cmdDb, err := sql.Open("postgres", cmdConnStr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	qryDb, err := sql.Open("postgres", qryConnStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cmdDb.Close()
+	defer qryDb.Close()
 
 	p := model.EodPrice{
 		Symbol:  "TESTCOMP",
@@ -51,12 +61,12 @@ func TestUpsertAndGetEodPrice(t *testing.T) {
 
 	by := "test-user"
 
-	err = service.UpsertEodPrices(db, []model.EodPrice{p}, by)
+	err = service.UpsertEodPrices(cmdDb, []model.EodPrice{p}, by)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	prices, err := service.GetEodPrices(db, p.Symbol)
+	prices, err := service.GetEodPrices(qryDb, p.Symbol)
 	if err != nil {
 		t.Fatal(err)
 	}
