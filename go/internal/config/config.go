@@ -15,7 +15,7 @@ type Config struct {
 	ShowHelp bool
 	Verbose  bool
 	Command  string
-	Data     string
+	Data     []string
 	Secrets  *Secrets
 }
 

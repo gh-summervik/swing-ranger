@@ -5,13 +5,39 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/summervik/swing-ranger/internal/config"
 	"github.com/summervik/swing-ranger/internal/model"
 
 	"github.com/shopspring/decimal"
 )
 
-func GetEodPrices(db *sql.DB, symbol string) ([]model.EodPrice, error) {
-	rows, err := db.Query(`
+type DbService struct {
+	Command *sql.DB
+	Query   *sql.DB
+	Comms   *CommsService
+}
+
+func NewDbService(cfg config.Config, comms *CommsService) (*DbService, error) {
+	cmdDb, err := sql.Open("postgres", cfg.Secrets.ConnectionStrings["Command"])
+	if err != nil {
+		return nil, err
+	}
+
+	qryDb, err := sql.Open("postgres", cfg.Secrets.ConnectionStrings["Query"])
+	if err != nil {
+		cmdDb.Close()
+		return nil, err
+	}
+
+	return &DbService{
+		Command: cmdDb,
+		Query:   qryDb,
+		Comms:   comms,
+	}, nil
+}
+
+func (s *DbService) GetEodPrices(symbol string) ([]model.EodPrice, error) {
+	rows, err := s.Query.Query(`
 		SELECT symbol, date_eod, open, high, low, close, volume
 		FROM public.eod_prices 
 		WHERE symbol = $1 
@@ -51,12 +77,12 @@ func GetEodPrices(db *sql.DB, symbol string) ([]model.EodPrice, error) {
 	return prices, rows.Err()
 }
 
-func UpsertEodPrices(db *sql.DB, prices []model.EodPrice, by string) error {
+func (s *DbService) UpsertEodPrices(prices []model.EodPrice, by string) error {
 	now := time.Now().UTC()
 	unixms := now.UnixMilli()
 
 	for _, p := range prices {
-		_, err := db.Exec(`
+		_, err := s.Command.Exec(`
 			INSERT INTO public.eod_prices 
 			(symbol, date_eod, open, high, low, close, volume, 
 			 created_by, updated_by, created_at, updated_at, 

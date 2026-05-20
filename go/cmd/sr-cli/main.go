@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,19 +26,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := parseArgs(os.Args)
+	cfg, err := parseArgs(os.Args)
 
-	if cfg.ShowHelp == true {
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println()
 		showUsage()
-		os.Exit(2)
+		os.Exit(1)
 	}
 
-	if cfg.Command == "" {
+	// If the user asked for help, just provide the help and exit.
+	if cfg.ShowHelp {
+		showUsage()
+		os.Exit(0)
+	}
+
+	// The absense of a command ends the process.
+	if strings.TrimSpace(cfg.Command) == "" {
 		fmt.Println("A command is required.")
 		showUsage()
 		os.Exit(2)
 	}
 
+	// Extract the secrets from the super secret json file.
 	secrets, err := config.LoadSecrets()
 	if err != nil {
 		fmt.Println(err)
@@ -47,57 +56,55 @@ func main() {
 	}
 	cfg.Secrets = secrets
 
-	if cfg.Command == "collect" {
-		cmdDb, err := sql.Open("postgres", cfg.Secrets.ConnectionStrings["Command"])
-		if err != nil {
-			fmt.Println("No query string found for Command.")
-			os.Exit(4)
-		}
-		qryDb, err := sql.Open("postgres", cfg.Secrets.ConnectionStrings["Query"])
-		if err != nil {
-			fmt.Println("No query string found for Query.")
-			os.Exit(4)
-		}
-		defer cmdDb.Close()
-		defer qryDb.Close()
-
-		yahooSvc := service.NewYahooService()
-
-		ctx := context.Background()
-		start := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-		end := time.Now().UTC()
-
-		prices, err := yahooSvc.GetHistorical(ctx, cfg.Data, start, end)
-		if err != nil {
-			fmt.Printf("Failed to fetch data from Yahoo: %v\n", err)
-			os.Exit(6)
-		}
-
-		err = service.UpsertEodPrices(cmdDb, prices, "system")
-		if err != nil {
-			fmt.Printf("Failed to save data to database: %v\n", err)
-			os.Exit(7)
-		}
-
-		fmt.Printf("Collected and saved %d records for %s\n", len(prices), cfg.Data)
-
-		// chart, err := service.GetEodPrices(qryDb, cfg.Data)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	os.Exit(5)
-		// }
-		// fmt.Println(chart)
-		// return
+	// establish services.
+	commsSvc := service.NewCommsService(cfg)
+	dbSvc, err := service.NewDbService(cfg, commsSvc)
+	if err != nil {
+		commsSvc.Communicate(fmt.Sprintf("Failed to create database service: %v", err))
+		os.Exit(4)
 	}
 
-	// fmt.Printf("%+v\n", cfg.Secrets.ConnectionStrings)
+	defer dbSvc.Command.Close()
+	defer dbSvc.Query.Close()
+
+	// process the specified command.
+	if cfg.Command == "collect" {
+		collectSymbols(cfg, commsSvc, dbSvc)
+	}
+
 	os.Exit(0)
+}
+
+func collectSymbols(cfg config.Config, comms *service.CommsService, db *service.DbService) error {
+	comms.Communicate(fmt.Sprintf("Collecting historical data for %d symbol(s)", len(cfg.Data)))
+	yahooSvc := service.NewYahooService()
+
+	ctx := context.Background()
+	start := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Now().UTC()
+
+	for _, symbol := range cfg.Data {
+		comms.Communicate(fmt.Sprintf("Fetching historical data for %s", symbol))
+		prices, err := yahooSvc.GetHistorical(ctx, symbol, start, end)
+		if err != nil {
+			comms.Communicate(fmt.Sprintf("Failed to fetch data from Yahoo for %s: %v", symbol, err))
+			continue
+		}
+
+		err = db.UpsertEodPrices(prices, "system")
+		if err != nil {
+			return err
+		}
+
+		comms.Communicate(fmt.Sprintf("Collected and saved %d records for %s", len(prices), symbol))
+	}
+	return nil
 }
 
 func showUsage() {
 	cmds := []CommandArg{
-		{"[init]", "Initialize for first-time use. Will NOT injure existig initializations."},
-		{"[collect <SYMBOL>]", "Capture price history for provided symbol."},
+		{"[init]", "Initialize for first-time use. Will NOT injure existing initializations."},
+		{"[collect <S1,S2,S3>]", "Capture price history for provided symbols. Use commas to separate symbols; no spaces."},
 		{"[-h | -? | ? | --help]", "Show help"},
 		{"[-v | --verbose]", "Verbose output"},
 	}
@@ -115,23 +122,38 @@ func showUsage() {
 		}
 	}
 
-	var executableName = filepath.Base(os.Args[0])
-	fmt.Printf("%s\t\tSwing trading toolbox\n", executableName)
+	var exeName = filepath.Base(os.Args[0])
+	fmt.Printf("%s\t\tSwing trading toolbox\n", exeName)
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println()
-	fmt.Printf("%s %s\n", executableName, strings.Join(allArgs, " "))
+	fmt.Printf("%s %s\n", exeName, strings.Join(allArgs, " "))
 	fmt.Println()
 
 	for i := 0; i < len(cmds); i++ {
 		fmt.Printf("%s\n", fmt.Sprintf("%-*s\t%s", colSize, cmds[i].Command, cmds[i].Description))
 	}
+	fmt.Println()
+	fmt.Println("Only one command (e.g., init, collect, etc.) is allowed; last one wins.")
+	fmt.Println()
+	fmt.Println("Examples")
+	fmt.Println(strings.Repeat("-", 20))
+	fmt.Println()
+	fmt.Printf("%s collect MSFT,TSLA", exeName)
+	fmt.Println("\tWill collect and preserve historical price information for MSFT and TSLA.")
+	fmt.Println()
+	fmt.Printf("%s collect MSFT,TSLA -v", exeName)
+	fmt.Println("\tCollects historical price information for MSFT and TSLA with verbose output.")
+	fmt.Println()
 }
 
-func parseArgs(args []string) config.Config {
+func parseArgs(args []string) (config.Config, error) {
 	cfg := config.Config{
-		Command: "",
-		Verbose: false,
+		Command:  "",
+		Verbose:  false,
+		ShowHelp: false,
+		Data:     nil,
+		Secrets:  nil,
 	}
 
 	count := len(args)
@@ -145,19 +167,32 @@ func parseArgs(args []string) config.Config {
 			cfg.Command = arg
 			i++
 			if i >= count {
-				fmt.Printf("Expecting symbol after %s\n", os.Args[i-1])
-				os.Exit(-1)
+				return cfg, fmt.Errorf("Expecting one or more symbols after %s", args[i-1])
 			}
-			cfg.Data = strings.ToUpper(os.Args[i])
+
+			symbolsStr := strings.TrimSpace(args[i])
+			if symbolsStr == "" {
+				return cfg, fmt.Errorf("Expecting symbol(s) after %s\n", args[i-1])
+			}
+			rawSymbols := strings.Split(symbolsStr, ",")
+			cfg.Data = make([]string, 0, len(rawSymbols))
+			for _, s := range rawSymbols {
+				trimmed := strings.TrimSpace(s)
+				if trimmed != "" {
+					cfg.Data = append(cfg.Data, strings.ToUpper(trimmed))
+				}
+			}
+			if len(cfg.Data) == 0 {
+				return cfg, fmt.Errorf("No valid symbols provided")
+			}
 		case "-v", "--verbose":
 			cfg.Verbose = true
 		case "-h", "help", "--help", "-?", "?":
 			cfg.ShowHelp = true
 		default:
-			fmt.Printf("Unknown argument: %s\n", os.Args[i])
-			os.Exit(-1)
+			return cfg, fmt.Errorf("Unknown argument: %s\n", os.Args[i])
 		}
 	}
 
-	return cfg
+	return cfg, nil
 }
