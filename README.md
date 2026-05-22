@@ -2,37 +2,72 @@
 
 ## Overview
 
-This project is a premise by which I intend to become proficient with the Go language, and maybe build something useful in the process.
-Beyond learning Go, my primary obective is to build a tool that helps me in swing trading stock options and which works with zero paid data services.
+This project is the path by which I am becoming proficient with the Go language.
+Maybe I'll build something useful along the way.
 
-At this point, I have some unstructured design ideas. Nothing here is a commitment.
+Beyond learning Go, my primary obective is to build a tool based only on free services that aids me in swing trading stock options.
+I'm just looking out for the little guy, of which I am one.
 
-1. Runs as a console app - feeds items to the console at a reasonable pace.
-2. Use a game engine and create an app that might resemble a video game menu system.
-3. Run various data source discovery processes as background threads that dump their discoveries into queues that can be dequeued and routed to UI and/or other queues/functions.
-4. Everything - data collected, analysis notes, user actions, etc. should be logged and/or catalogued for learning and debugging.
-5. The system should get "smarter" over time. There should be a foundational set of rules, but the system should strive to get better at predicting short-term direction and changes.
+---
 
-## Technologies
+## Prerequisites
 
 This project uses the [Go programming language](https://go.dev/) and [PostgreSQL](https://www.postgresql.org/) for data storage.
 
-## Initial Project Structure
+You will need:
 
-To familiarize yourself with the project, please consider tracking down and reviewing the README.md files in the project.
+1. A Go compiler for your operating system.
+2. An instance of PostgreSQL.
+
+My dev environment, as of 2026-May-21:
 
 ```bash
-├── bin
-│   ├── README.md
-├── database
-│   └── README.md
-├── docs
-│   └── README.md
-├── go
-│   ├── README.md
-└── scripts
-    └── README.md
+$ go version
+go version go1.25.6 linux/amd64
+$ psql --version
+psql (PostgreSQL) 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 ```
+
+---
+
+## Getting Started
+
+1. See prerequisites above.
+2. Get your database up and running. See the `/database/README.md`.
+3. Compile the CLI. From the `/go` directory, I run `go build -o ../bin/sr-cli ./cmd/sr-cli/`.
+4. Get your `secrets.json` file sorted. If this means nothing to you, see the setup and configuration section later in this file.
+5. Run the app. `../bin/sr-cli help` and/or `../bin/sr-cli init`.
+   
+You might also consider reviewing all the README.md files in the project.
+
+As of 2026-May-21:
+
+```bash
+~/swing-ranger$ find . -name README.md
+./scripts/README.md
+./database/README.md
+./docs/README.md
+./README.md
+./go/README.md
+./bin/README.md
+```
+
+---
+
+## History
+
+You can stalk the git history yourself, but in broad strokes ...
+
+The first thing I did was figure out how to handle CLI command-line arguments.
+
+Then I figured out how to read in files like `secrets.json` and deserialize them into types.
+
+I then built a simple database to house price action data and I worked through the hurdles of interacting with the database from my app.
+
+Then I was ready for some data input. Yahoo was my first choice and it came together easily.
+This feature can be used with `sr-cli -v collect MSFT,NVDA,SNDK,PLTR`.
+
+I'm currently working on simple charts and am going to investigate from whence we might get financial data.
 
 ## Setup and Configuration
 
@@ -56,7 +91,7 @@ Here are the current locations of all my `secrets.json` files.
 ```
 
 Following is an example `secrets.json` file.
-The keys must be named "Command" and "Query."
+The keys **MUST** be named "Command" and "Query."
 
 ```json
 {
@@ -67,7 +102,37 @@ The keys must be named "Command" and "Query."
 }
 ```
 
+### Managing Application Configuration (Charts and such)
+
+Application-wide configuration can be accomplished with a `config.json` file (located next to your `secrets.json` file).
+
+If no `config.json` file is found, a default configuration is created.
+To see this default configuration, see the `LoadAppConfig` function in the `./go/internal/config/config.go` file.
+
+Here is an example, as of 2026-May-21:
+
+```json
+{
+    "Chart": {
+        "MovingAverages": [
+            "21SC",
+            "50SC",
+            "200SC"
+        ]
+    }
+}
+```
+
+#### Moving Averages
+
+The `MovingAverages` section of the `config.json` file content uses an array of special strings.
+Each string starts with a number and is followed by two characters.
+The number is the moving average period and must be between 1 and 1000 inclusively.
+The first character can be either "S" for simple or "E" for exponential.
+The final character corresponds to the price point you want to use. Your choices are "O", "H", "L", and "C", for open, high, low, and close respectively.
+
 ## Tests
 
+Copy the `secrets.json` file you created above to the `testdata` directory for database integration tests to pass.
+
 To run tests, from the `go` directory, run `go test ./...`.
-If your `secrets.json` file is set up correctly in the `testdata` directory, the integration tests should pass.
