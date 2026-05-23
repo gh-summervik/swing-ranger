@@ -48,7 +48,7 @@ type yahooChartResponse struct {
 	} `json:"chart"`
 }
 
-func (s *YahooService) GetHistorical(ctx context.Context, symbol string, start, end time.Time) ([]model.EodPrice, error) {
+func (s *YahooService) GetHistorical(ctx context.Context, symbol string, start, end time.Time) ([]model.EodCandlestick, error) {
 	period1 := start.Unix()
 	period2 := end.Unix()
 
@@ -100,7 +100,7 @@ func (s *YahooService) GetHistorical(ctx context.Context, symbol string, start, 
 		return nil, fmt.Errorf("no timestamps in response")
 	}
 
-	eodPrices := make([]model.EodPrice, 0, len(result.Timestamp))
+	eodCandles := make([]model.EodCandlestick, 0, len(result.Timestamp))
 	quoteData := result.Indicators.Quote[0]
 
 	for i, ts := range result.Timestamp {
@@ -127,16 +127,16 @@ func (s *YahooService) GetHistorical(ctx context.Context, symbol string, start, 
 			volumeVal = quoteData.Volume[i]
 		}
 
-		eodPrices = append(eodPrices, model.EodPrice{
-			Symbol:  result.Meta.Symbol,
-			DateEod: date,
-			Open:    decimal.NewFromFloat(openVal),
-			High:    decimal.NewFromFloat(highVal),
-			Low:     decimal.NewFromFloat(lowVal),
-			Close:   decimal.NewFromFloat(closeVal),
-			Volume:  float64(volumeVal),
-		})
+		eodCandles = append(eodCandles, model.NewEodCandlestick(
+			result.Meta.Symbol,
+			date,
+			decimal.NewFromFloat(openVal),
+			decimal.NewFromFloat(highVal),
+			decimal.NewFromFloat(lowVal),
+			decimal.NewFromFloat(closeVal),
+			float64(volumeVal),
+		))
 	}
 
-	return eodPrices, nil
+	return eodCandles, nil
 }

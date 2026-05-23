@@ -18,7 +18,7 @@ type secrets struct {
 	ConnectionStrings map[string]string `json:"ConnectionStrings"`
 }
 
-func TestUpsertAndGetEodPrice(t *testing.T) {
+func TestUpsertAndGetEodCandlestick(t *testing.T) {
 	data, err := os.ReadFile("../../testdata/secrets.json")
 	if err != nil {
 		t.Fatal(err)
@@ -49,41 +49,46 @@ func TestUpsertAndGetEodPrice(t *testing.T) {
 	defer cmdDb.Close()
 	defer qryDb.Close()
 
-	p := model.EodPrice{
-		Symbol:  "TESTCOMP",
-		DateEod: time.Date(2025, 5, 17, 0, 0, 0, 0, time.UTC),
-		Open:    decimal.NewFromFloat(150.25),
-		High:    decimal.NewFromFloat(152.30),
-		Low:     decimal.NewFromFloat(149.80),
-		Close:   decimal.NewFromFloat(151.75),
-		Volume:  45230000.0,
+	dbService := &service.DbService{
+		Command: cmdDb,
+		Query:   qryDb,
 	}
+
+	c := model.NewEodCandlestick(
+		"TESTCOMP",
+		time.Date(2025, 5, 17, 0, 0, 0, 0, time.UTC),
+		decimal.NewFromFloat(150.25),
+		decimal.NewFromFloat(152.30),
+		decimal.NewFromFloat(149.80),
+		decimal.NewFromFloat(151.75),
+		45230000.0,
+	)
 
 	by := "test-user"
 
-	err = service.UpsertEodPrices(cmdDb, []model.EodPrice{p}, by)
+	err = dbService.UpsertEodPrices([]model.EodCandlestick{c}, by)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	prices, err := service.GetEodPrices(qryDb, p.Symbol)
+	candles, err := dbService.GetEodCandlesticks(c.Symbol)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(prices) == 0 {
+	if len(candles) == 0 {
 		t.Fatal("expected at least one record")
 	}
 
-	got := prices[len(prices)-1]
+	got := candles[len(candles)-1]
 
-	if got.Symbol != p.Symbol ||
-		!got.DateEod.Equal(p.DateEod) ||
-		!got.Open.Equal(p.Open) ||
-		!got.High.Equal(p.High) ||
-		!got.Low.Equal(p.Low) ||
-		!got.Close.Equal(p.Close) ||
-		got.Volume != p.Volume {
-		t.Fatalf("data mismatch\ngot: %+v\nwant: %+v", got, p)
+	if got.Symbol != c.Symbol ||
+		!got.DateEod.Equal(c.DateEod) ||
+		!got.Open.Equal(c.Open) ||
+		!got.High.Equal(c.High) ||
+		!got.Low.Equal(c.Low) ||
+		!got.Close.Equal(c.Close) ||
+		got.Volume != c.Volume {
+		t.Fatalf("data mismatch\ngot: %+v\nwant: %+v", got, c)
 	}
 }

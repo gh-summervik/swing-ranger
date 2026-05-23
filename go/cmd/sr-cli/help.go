@@ -11,6 +11,11 @@ import (
 	_ "github.com/lib/pq"
 )
 
+type CommandArg struct {
+	Command     string
+	Description string
+}
+
 func parseArgs(args []string) (config.Config, error) {
 	cfg := config.Config{
 		Command:  "",
@@ -25,8 +30,17 @@ func parseArgs(args []string) (config.Config, error) {
 	for i := 1; i < count; i++ {
 		arg := strings.ToLower(os.Args[i])
 		switch arg {
-		case "init", "update", "test":
+		case "init", "update", "test", "backtest":
 			cfg.Command = arg
+
+			if arg == "backtest" {
+				i++
+				if i >= count {
+					return cfg, fmt.Errorf("backtest requires a name (e.g. squeeze_breakout)")
+				}
+				cfg.Data = []string{strings.TrimSpace(os.Args[i])}
+			}
+
 		case "collect":
 			cfg.Command = arg
 			i++
@@ -49,6 +63,7 @@ func parseArgs(args []string) (config.Config, error) {
 			if len(cfg.Data) == 0 {
 				return cfg, fmt.Errorf("No valid symbols provided")
 			}
+
 		case "-v", "--verbose":
 			cfg.Verbose = true
 		case "-h", "help", "--help", "-?", "?":
@@ -66,6 +81,7 @@ func showUsage() {
 		{"[init]", "Command to initialize first-time use. Will NOT injure existing initializations."},
 		{"[collect <S1,S2,S3>]", "Command to capture price history for provided symbols. Use commas to separate symbols; no spaces."},
 		{"[update]", "Command to update price action data for existing symbols (symbols previously captured)."},
+		{"[backtest <name>]", "Run a configured backtest (e.g. squeeze_breakout)"},
 		{"[-h | -? | ? | --help]", "Show help"},
 		{"[-v | --verbose]", "Verbose output"},
 	}
@@ -77,7 +93,6 @@ func showUsage() {
 
 	var colSize = 0
 	for i := 0; i < len(cmds); i++ {
-
 		if len(cmds[i].Command) > colSize {
 			colSize = len(cmds[i].Command)
 		}
@@ -95,7 +110,7 @@ func showUsage() {
 		fmt.Printf("%s\n", fmt.Sprintf("%-*s\t%s", colSize, cmds[i].Command, cmds[i].Description))
 	}
 	fmt.Println()
-	fmt.Println("Only one command (e.g., init, collect, update, etc.) is allowed; last one wins.")
+	fmt.Println("Only one command (e.g., init, collect, update, backtest, etc.) is allowed; last one wins.")
 	fmt.Println()
 	fmt.Println("Examples")
 	fmt.Println(strings.Repeat("-", 20))
@@ -108,6 +123,9 @@ func showUsage() {
 	fmt.Println()
 	fmt.Printf("%s update", exeName)
 	fmt.Println("\tUpdates price action for existing symbols.")
+	fmt.Println()
+	fmt.Printf("%s backtest squeeze_breakout", exeName)
+	fmt.Println("\tRuns the squeeze breakout backtest on symbols with more than 200 candles.")
 	fmt.Println()
 	fmt.Println(strings.Repeat("-", 20))
 	fmt.Println()
