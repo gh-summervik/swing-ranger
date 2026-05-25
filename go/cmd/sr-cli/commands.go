@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"github.com/summervik/swing-ranger/internal/config"
 	"github.com/summervik/swing-ranger/internal/model"
 	"github.com/summervik/swing-ranger/internal/service"
@@ -26,13 +28,13 @@ func initApp() []string {
 	} else if secrets.ConnectionStrings["Query"] == "" {
 		result = append(result, "A 'Query' connection was not found in the secrets.json file.")
 	} else {
-		result = append(result, "No issues found; app is initialized.")
+		result = append(result, "No issues found; app is ready.")
 	}
 
 	return result
 }
 
-func collectSymbols(cfg config.Config, comms *service.CommsService, db *service.DbService) error {
+func collectHistoricalEod(cfg config.Config, comms *service.CommsService, db *service.DbService) error {
 	comms.Communicate(fmt.Sprintf("Collecting historical data for %d symbol(s)", len(cfg.Data)))
 	yahooSvc := service.NewYahooService()
 
@@ -107,60 +109,6 @@ func doBacktest(cfg config.Config, db *service.DbService) error {
 	return nil
 }
 
-func createSqueezeBreakoutDetector(cfg config.BacktestConfig) service.EventDetector {
-	return func(chart *model.Chart) []model.Event {
-		if chart == nil {
-			return nil
-		}
-		var events []model.Event
-		lookback := cfg.SqueezeLookback
-		minBars := cfg.MinSqueezeBars
-		minRSI := cfg.MinRSI
-
-		bb := chart.BollingerBands
-		if len(bb) == 0 {
-			return nil
-		}
-
-		for i := lookback; i < len(chart.Candles); i++ {
-			minWidth := decimal.NewFromInt(999999)
-			minIdx := i
-			for j := i - lookback; j <= i; j++ {
-				width := bb[model.BBUpper1][j].Sub(bb[model.BBLower1][j])
-				if width.LessThan(minWidth) {
-					minWidth = width
-					minIdx = j
-				}
-			}
-
-			squeezeCount := 0
-			for j := minIdx; j <= i; j++ {
-				width := bb[model.BBUpper1][j].Sub(bb[model.BBLower1][j])
-				if width.Equal(minWidth) || width.LessThan(minWidth.Mul(decimal.NewFromFloat(1.05))) {
-					squeezeCount++
-				}
-			}
-			if squeezeCount < minBars {
-				continue
-			}
-
-			c := chart.Candles[i]
-			if c.Close.GreaterThan(bb[model.BBUpper1][i]) &&
-				c.IsBullish &&
-				chart.RSI[model.RSIValue][i].GreaterThan(decimal.NewFromInt(int64(minRSI))) {
-
-				events = append(events, model.Event{
-					Symbol:    chart.Symbol,
-					EventName: "squeeze_breakout",
-					DateEod:   c.DateEod,
-					Index:     i,
-				})
-			}
-		}
-		return events
-	}
-}
-
 func doTest(cfg config.Config, db *service.DbService) error {
 	data, _ := json.MarshalIndent(cfg, "", "  ")
 	fmt.Println(string(data))
@@ -181,6 +129,39 @@ func doTest(cfg config.Config, db *service.DbService) error {
 
 	for i := 0; i < len(chart.Candles); i++ {
 		fmt.Printf("%s\t%s\t%s\t%s\t%s\n", chart.Candles[i].DateEod.Format("2006-01-02"), chart.Candles[i].Close.Round(4).String(), chart.MovingAverages["fast"][i].Round(4).String(), chart.MovingAverages["mid"][i].Round(4).String(), chart.MovingAverages["slow"][i].Round(4).String())
+	}
+
+	return nil
+}
+
+func readWatchlistCsv(path string, db *service.DbService) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	watchlistMap := make(map[string][]string)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if parts := strings.Split(line, ","); len(parts) == 2 {
+			watchlist := strings.TrimSpace(parts[0])
+			symbol := strings.TrimSpace(parts[1])
+			if watchlist != "" && symbol != "" {
+				watchlistMap[watchlist] = append(watchlistMap[watchlist], symbol)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	if err := db.UpdateWatchlists(watchlistMap); err != nil {
+		return err
 	}
 
 	return nil

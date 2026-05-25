@@ -17,3 +17,9 @@ type EodPriceDao struct {
 	CreatedAtUnixMs int64
 	UpdatedAtUnixMs int64
 }
+
+type WatchlistDao struct {
+	WatchlistName string
+	Symbol        string
+	CreatedAt     time.Time
+}

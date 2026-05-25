@@ -5,7 +5,7 @@
 This project is the path by which I am becoming proficient with the Go language.
 Maybe I'll build something useful along the way.
 
-Beyond learning Go, my primary obective is to build a tool based only on free services that aids me in swing trading stock options.
+My primary obective is to build a tool that aids me in swing trading stock options.
 I'm just looking out for the little guy, of which I am one.
 
 ---
@@ -67,7 +67,16 @@ I then built a simple database to house price action data and I worked through t
 Then I was ready for some data input. Yahoo was my first choice and it came together easily.
 This feature can be used with `sr-cli -v collect MSFT,NVDA,SNDK,PLTR`.
 
-I'm currently working on simple charts and am going to investigate from whence we might get financial data.
+I shelled out simple watchlists.
+I added a new table to the database and enhanced the service layer to support creating watchlists.
+You can create a CSV file with the format `<watchlist name>,<symbol>`, as in `SPY,NVDA`.
+Feed that CSV to the database using `sr-cli watchlist ./watchlist.csv`.
+There is a sample watchlist.csv in the `/go/testdata` directory.
+
+I built the first backtest.
+Backtests look at all symbols with 200 or more candles of data.
+This backtest attempts to find bollinger band "squeeze breakouts."
+You can run this backtest with `sr-cli backtest squeeze_breakout`.
 
 ## Setup and Configuration
 
@@ -96,8 +105,8 @@ The keys **MUST** be named "Command" and "Query."
 ```json
 {
   "ConnectionStrings": {
-    "Command": "user=sr_admin password=7C7Dxa43 host=127.0.0.1 port=5432 dbname=sr_test sslmode=disable",
-    "Query": "user=sr_reader password=0e5z66Capl host=127.0.0.1 port=5432 dbname=sr_test sslmode=disable"
+    "Command": "user=sr_admin password=YOURPASSWORD host=127.0.0.1 port=5432 dbname=sr_test sslmode=disable",
+    "Query": "user=sr_reader password=YOURPASSWORD host=127.0.0.1 port=5432 dbname=sr_test sslmode=disable"
   }
 }
 ```
@@ -109,16 +118,27 @@ Application-wide configuration can be accomplished with a `config.json` file (lo
 If no `config.json` file is found, a default configuration is created.
 To see this default configuration, see the `LoadAppConfig` function in the `./go/internal/config/config.go` file.
 
-Here is an example, as of 2026-May-21:
+Here is an example, as of 2026-May-24:
 
 ```json
 {
     "Chart": {
         "MovingAverages": [
             "21SC",
-            "50SC",
-            "200SC"
-        ]
+            "55SC",
+            "233SC"
+        ],
+        "BollingerBandsMovingAverage": "20SC",
+        "MACD": "12,26,9C",
+        "RSI": "14C",
+        "Backtests": {
+            "squeeze_breakout": {
+                "type": "squeeze_breakout",
+                "squeezeLookback": 50,
+                "minSqueezeBars": 3,
+                "minRSI": 50
+            }
+        }
     }
 }
 ```
@@ -131,7 +151,26 @@ The number is the moving average period and must be between 1 and 1000 inclusive
 The first character can be either "S" for simple or "E" for exponential.
 The final character corresponds to the price point you want to use. Your choices are "O", "H", "L", and "C", for open, high, low, and close respectively.
 
-## Tests
+#### Bollinger Bands
+
+The value assigned is the core moving average for the bands.
+The first, second, and third standard deviations are all charted.
+
+#### MACD
+
+These values represent the parameters for the MACD.
+The final character ('C' in the example above) is the price point used.
+
+#### RSI
+
+The value represents the number of periods in the lookback and the price point to use.
+
+#### Backtests
+
+Each backtest is likely to have configurable variables.
+These sections correspond to those tests.
+
+## Unit and Integration Tests
 
 Copy the `secrets.json` file you created above to the `testdata` directory for database integration tests to pass.
 

@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS public.watchlists CASCADE;
 DROP TABLE IF EXISTS public.eod_prices CASCADE;
 
 CREATE TABLE IF NOT EXISTS public.eod_prices (
@@ -16,3 +17,13 @@ CREATE TABLE IF NOT EXISTS public.eod_prices (
     updated_at_unix_ms BIGINT NOT NULL,
     PRIMARY KEY (symbol, date_eod)
 );
+
+CREATE TABLE IF NOT EXISTS public.watchlists (
+    watchlist_name TEXT NOT NULL,  
+    symbol     TEXT NOT NULL,  
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (watchlist_name, symbol)
+);
+
+CREATE INDEX IF NOT EXISTS idx_watchlists_name 
+    ON public.watchlists (watchlist_name);

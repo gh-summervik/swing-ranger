@@ -39,6 +39,21 @@ I connect to the database I want to manage, and from a PSQL prompt, I run:
 
 You should be able to complete these steps for any db - just change the name of the database in the `CREATE DATABASE` command and then navigate to it using the `\c` command before running the scripts with `\i`.
 
+## Useful SQL
+
+### Find symbols in watchlists not in eod_prices
+
+```sql
+SELECT DISTINCT symbol
+FROM public.watchlists w
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.eod_prices p
+    WHERE p.symbol = w.symbol
+)
+ORDER BY symbol;
+```
+
 ## Other notes
 
 ### Making a copy of the database.

@@ -30,17 +30,16 @@ func parseArgs(args []string) (config.Config, error) {
 	for i := 1; i < count; i++ {
 		arg := strings.ToLower(os.Args[i])
 		switch arg {
-		case "init", "update", "test", "backtest":
+		case "init", "update", "test":
 			cfg.Command = arg
-
-			if arg == "backtest" {
-				i++
-				if i >= count {
-					return cfg, fmt.Errorf("backtest requires a name (e.g. squeeze_breakout)")
-				}
-				cfg.Data = []string{strings.TrimSpace(os.Args[i])}
+		case "backtest", "watchlist":
+			cfg.Command = arg
+			i++
+			if i >= count {
+				return cfg, fmt.Errorf("Expecting a backtest name after %s", args[i-1])
 			}
-
+			cfg.Data = make([]string, 0, 1)
+			cfg.Data = append(cfg.Data, args[i])
 		case "collect":
 			cfg.Command = arg
 			i++
@@ -78,10 +77,11 @@ func parseArgs(args []string) (config.Config, error) {
 
 func showUsage() {
 	cmds := []CommandArg{
-		{"[init]", "Command to initialize first-time use. Will NOT injure existing initializations."},
+		{"[init]", "Command to check basics before first-time use. Will NOT injure existing initializations."},
 		{"[collect <S1,S2,S3>]", "Command to capture price history for provided symbols. Use commas to separate symbols; no spaces."},
 		{"[update]", "Command to update price action data for existing symbols (symbols previously captured)."},
 		{"[backtest <name>]", "Run a configured backtest (e.g. squeeze_breakout)"},
+		{"[watchlist <path>]", "Reads in a CSV file for setting up watchlists (e.g., SPY)"},
 		{"[-h | -? | ? | --help]", "Show help"},
 		{"[-v | --verbose]", "Verbose output"},
 	}
@@ -99,7 +99,7 @@ func showUsage() {
 	}
 
 	var exeName = filepath.Base(os.Args[0])
-	fmt.Printf("\n%s\t\tSwing trading toolbox\n", exeName)
+	fmt.Printf("\n%s\t\tSwing Ranger - a trader's toolbox\n", exeName)
 	fmt.Println()
 	fmt.Println("Usage:")
 	fmt.Println()
@@ -110,22 +110,25 @@ func showUsage() {
 		fmt.Printf("%s\n", fmt.Sprintf("%-*s\t%s", colSize, cmds[i].Command, cmds[i].Description))
 	}
 	fmt.Println()
-	fmt.Println("Only one command (e.g., init, collect, update, backtest, etc.) is allowed; last one wins.")
+	fmt.Println("Only one command (e.g., init, collect, update, backtest, watchlist, etc.) is allowed; last one wins.")
 	fmt.Println()
 	fmt.Println("Examples")
 	fmt.Println(strings.Repeat("-", 20))
 	fmt.Println()
-	fmt.Printf("%s collect MSFT,TSLA", exeName)
+	fmt.Printf("`%s collect MSFT,TSLA`", exeName)
 	fmt.Println("\tWill collect and preserve historical price information for MSFT and TSLA.")
 	fmt.Println()
-	fmt.Printf("%s collect MSFT,TSLA -v", exeName)
+	fmt.Printf("`%s collect MSFT,TSLA -v`", exeName)
 	fmt.Println("\tCollects historical price information for MSFT and TSLA with verbose output.")
 	fmt.Println()
-	fmt.Printf("%s update", exeName)
+	fmt.Printf("`%s update`", exeName)
 	fmt.Println("\tUpdates price action for existing symbols.")
 	fmt.Println()
-	fmt.Printf("%s backtest squeeze_breakout", exeName)
-	fmt.Println("\tRuns the squeeze breakout backtest on symbols with more than 200 candles.")
+	fmt.Printf("`%s backtest squeeze_breakout`", exeName)
+	fmt.Println("\tRuns the squeeze breakout backtest on SPY.")
+	fmt.Println()
+	fmt.Printf("`%s watchlist ./data/watchlist.csv`", exeName)
+	fmt.Println("\tReplaces the watchlists in the database with those provided by the CSV.")
 	fmt.Println()
 	fmt.Println(strings.Repeat("-", 20))
 	fmt.Println()
@@ -136,5 +139,28 @@ func showUsage() {
     "Command": "Your connection string here",
     "Query": "Your connection string here"
   }
+}`)
+	fmt.Println()
+	fmt.Println("A config.json can be used to configure chart and backtesting parameters. Here is an example.")
+	fmt.Println()
+	fmt.Println(`{
+    "Chart": {
+        "MovingAverages": [
+            "21SC",
+            "55SC",
+            "233SC"
+        ],
+        "BollingerBandsMovingAverage": "20SC",
+        "MACD": "12,26,9C",
+        "RSI": "14C",
+        "Backtests": {
+            "squeeze_breakout": {
+                "type": "squeeze_breakout",
+                "squeezeLookback": 50,
+                "minSqueezeBars": 3,
+                "minRSI": 50
+            }
+        }
+    }
 }`)
 }

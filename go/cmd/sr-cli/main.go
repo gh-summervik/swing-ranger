@@ -82,14 +82,23 @@ func main() {
 			fmt.Println(err)
 		}
 	case "collect":
-		collectSymbols(cfg, commsSvc, dbSvc)
+		collectHistoricalEod(cfg, commsSvc, dbSvc)
 	case "backtest":
 		if len(cfg.Data) == 0 {
-			commsSvc.Communicate("Missing name of backtest.")
+			fmt.Println("Usage: backtest <name> (e.g. squeeze_breakout)")
 			os.Exit(1)
 		}
 		if err := doBacktest(cfg, dbSvc); err != nil {
 			fmt.Println(err)
+		}
+	case "watchlist":
+		if len(cfg.Data) < 1 {
+			fmt.Println("Usage: watchlist <path>")
+			os.Exit(1)
+		}
+		if err := readWatchlistCsv(cfg.Data[0], dbSvc); err != nil {
+			fmt.Println(err)
+			os.Exit(2)
 		}
 	}
 
